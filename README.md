@@ -14,6 +14,14 @@ When new User Follow this bot, ask to admin want to be approve.
 
 ## Install
 
+- install SqLite
+  - see [this Article](https://nekonisi.com/install_sqlite/)
+  - or execute below command(Debian系)
+  ```bash
+  sudo apt install sqlite3 -y
+  ```
+
+- install pip library
 ```
 pip install -r requirements.txt
 ```

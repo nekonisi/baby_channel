@@ -13,12 +13,9 @@
 #  under the License.
 
 
-import datetime
 import errno
-import json
 import os
 import sys
-import tempfile
 import cv2
 from argparse import ArgumentParser
 
@@ -32,21 +29,10 @@ from linebot.exceptions import (
     LineBotApiError, InvalidSignatureError
 )
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-    SourceUser, SourceGroup, SourceRoom,
-    TemplateSendMessage, ConfirmTemplate, MessageAction,
-    ButtonsTemplate, ImageCarouselTemplate, ImageCarouselColumn, URIAction,
-    PostbackAction, DatetimePickerAction,
-    CameraAction, CameraRollAction, LocationAction,
-    CarouselTemplate, CarouselColumn, PostbackEvent,
-    StickerMessage, StickerSendMessage, LocationMessage, LocationSendMessage,
-    ImageMessage, VideoMessage, AudioMessage, FileMessage,
-    UnfollowEvent, FollowEvent, JoinEvent, LeaveEvent, BeaconEvent,
-    MemberJoinedEvent, MemberLeftEvent,
-    FlexSendMessage, BubbleContainer, ImageComponent, BoxComponent,
-    TextComponent, IconComponent, ButtonComponent,
-    SeparatorComponent, QuickReply, QuickReplyButton,
-    ImageSendMessage)
+    MessageEvent, TextMessage, TextSendMessage, SourceUser, TemplateSendMessage, ConfirmTemplate, MessageAction, PostbackAction, ImageSendMessage, PostbackEvent)
+
+# DB関連機能の読み込み
+from DB.db import *
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
@@ -57,14 +43,13 @@ channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', None)
 line_admin_user_id = os.getenv('LINE_ADMIN_USER_ID', None)
 
 if channel_secret is None or channel_access_token is None or line_admin_user_id is None:
-    print('Specify LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN as environment variables.')
+    print('Specify LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN, LINE_ADMIN_USER_ID as environment variables.')
     sys.exit(1)
 
 line_bot_api = LineBotApi(channel_access_token)
 handler = WebhookHandler(channel_secret)
 
 static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
-
 
 # function for create tmp dir for download content
 def make_static_tmp_dir():
@@ -99,26 +84,51 @@ def callback():
 
     return 'OK'
 
-
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
+    # 対象のユーザのuser_idとprofileは使い回すのでglobalで定義
+    global user_id
+    global profile
+    profile = line_bot_api.get_profile(event.source.user_id)
+    #1 Some Request
+    # 認証機能
+    if isinstance(event.source, SourceUser):
+        #2 check users
+        user_id = event.source.user_id
+        # 3 result
+        user = session.query(User).filter(User.user_id == user_id).first()
+        session.close()
+    else:
+        pass
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="[Error]プロフィール情報が取得できませんでした。"))
+    
+    if user is None:
+        # User is not authenticated
+        # 4 Message
+        confirm_template = ConfirmTemplate(text='あなたは未認証のユーザです。管理者に認証リクエストを送信しますか？', actions=[
+            PostbackAction(
+                label='はい',
+                data='auth'
+            ),
+            PostbackAction(
+                label='いいえ',
+                data='bye'
+            ),
+        ])
+        template_message = TemplateSendMessage(
+            alt_text='認証確認', template=confirm_template)
+        line_bot_api.reply_message(event.reply_token, template_message)
+
+    else:
+        # User is Authenticated
+        # Do Action
+        pass
+
     text = event.message.text
 
-    if text == 'profile':
-        if isinstance(event.source, SourceUser):
-            profile = line_bot_api.get_profile(event.source.user_id)
-            line_bot_api.reply_message(
-                event.reply_token, [
-                    TextSendMessage(text='Display name: ' + profile.display_name),
-                    TextSendMessage(text='Status message: ' + str(profile.status_message)),
-                    TextSendMessage(text='User id: ' + event.source.user_id),
-                ]
-            )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Bot can't use profile API without user ID"))
-    elif text == '写真撮影する':
+    if text == '写真撮影する':
         line_bot_api.push_message(
             event.source.user_id,
             TextSendMessage(text="写真を撮るよ！はいチーズ！")
@@ -142,39 +152,44 @@ def handle_text_message(event):
                 event.reply_token,
                 TextSendMessage(text='写真撮影に失敗しちゃいました！')
             )
-    elif text == 'confirm':
-        confirm = ConfirmTemplate(text='新規ユーザを認証しますか？', actions=[
-            MessageAction(label='はい', postback='yes'),
-            MessageAction(label='いいえ', text='no'),
-        ])
-        confirm_message = TemplateSendMessage(
-            alt_text='新規ユーザの認証', template=confirm)
-        print(confirm_message)
-        # if confirm_message == 'yes':
-        #     pass
-        #     # 認証データに追加
-        # else:
-        #     line_bot_api.reply_message(
-        #         event.reply_token,
-        #         TextSendMessage(text="認証が却下されました。nekonisi（こうすけ）に連絡してください。")
-        #     )
-
-
-        line_bot_api.push_message(line_admin_user_id, confirm_message)
     else:
-        emojis = [
-            {
-                "index": 0,
-                "productId": "5ac1bfd5040ab15980c9b435",
-                "emojiId": "191"
-            },
-        ]
-        text_message = TextSendMessage(text='$', emojis=emojis)
-        line_bot_api.reply_message(
-            event.reply_token, [
-                text_message
-            ]
+        line_bot_api.push_message(
+            line_admin_user_id,
+            TextSendMessage(text=text)
         )
+
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    if event.postback.data == 'auth':
+        display_name = line_bot_api.get_profile(event.source.user_id).display_name
+        # User is not authenticated
+        # 7 Message
+        confirm_template = ConfirmTemplate(text=display_name + 'から認証リクエストきたけど認証しちゃう？', actions=[
+            PostbackAction(
+                label='はい',
+                data='auth_yes'
+            ),
+            PostbackAction(
+                label='いいえ',
+                data='auth_no'
+            ),
+        ])
+        template_message = TemplateSendMessage(
+            alt_text='認証確認', template=confirm_template)
+        line_bot_api.push_message(line_admin_user_id, template_message)
+    elif event.postback.data == 'bye':
+        # 6 Message
+        line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text='bye!'))
+    elif event.postback.data == 'auth_no':
+        # [Admin's Answer is "No"]
+        line_bot_api.push_message(user_id, TextSendMessage(text="ごめん。あかんってさ"))
+    elif event.postback.data == 'auth_yes':
+        # [Admin's Answer is "Yes"]
+        user = User(name=profile.display_name, user_id=user_id)
+        session.add(user) # insert処理
+        session.commit()    # commit
+        line_bot_api.push_message(user_id, TextSendMessage(text="よかったね。承認されたみたいよ。"))
 
 
 def take_photo():
@@ -185,18 +200,9 @@ def take_photo():
         cv2.imwrite('./static/photo.png', frame)
     return res
 
-
-@handler.add(FollowEvent)
-def handle_follow(event):
-    app.logger.info("Got Follow event:" + event.source.user_id)
-    line_bot_api.reply_message(
-        event.reply_token, TextSendMessage(text='nekonisiに認証されるまで待ってね'))
-
-
 @app.route('/static/<path:path>')
 def send_static_content(path):
     return send_from_directory('static', path)
-
 
 if __name__ == "__main__":
     arg_parser = ArgumentParser(

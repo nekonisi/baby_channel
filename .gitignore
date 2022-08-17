@@ -3,3 +3,4 @@ static
 debug.log
 baby
 *.sqlite3
+*.db

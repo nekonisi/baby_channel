@@ -161,6 +161,8 @@ def handle_text_message(event):
 @handler.add(PostbackEvent)
 def handle_postback(event):
     if event.postback.data == 'auth':
+        line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text='管理者宛に認証リクエストを申請しました。ちょっと待ってね'))
         display_name = line_bot_api.get_profile(event.source.user_id).display_name
         # User is not authenticated
         # 7 Message

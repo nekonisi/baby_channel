@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # DB接続
-engine = create_engine('sqlite:///test.db')
+engine = create_engine('sqlite:///DB/baby_channel.db')
  
 # Base
 Base = declarative_base()
@@ -21,7 +21,7 @@ class User(Base):
     # 個々のカラムを定義
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    age = Column(Integer)
+    user_id = Column(String)
 
 # テーブルクラスのテーブルを生成
 Base.metadata.create_all(engine)

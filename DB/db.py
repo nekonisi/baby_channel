@@ -21,7 +21,7 @@ class User(Base):
     # 個々のカラムを定義
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    user_id = Column(String)
+    user_id = Column(String, unique=True)
 
 # テーブルクラスのテーブルを生成
 Base.metadata.create_all(engine)

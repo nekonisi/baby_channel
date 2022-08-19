@@ -33,7 +33,7 @@ from linebot.models import (
 
 # DB関連機能の読み込み
 from DB.db import *
-
+import urllib.parse
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
 
@@ -86,10 +86,6 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
-    # 対象のユーザのuser_idとprofileは使い回すのでglobalで定義
-    global user_id
-    global profile
-    profile = line_bot_api.get_profile(event.source.user_id)
     #1 Some Request
     # 認証機能
     if isinstance(event.source, SourceUser):
@@ -110,11 +106,11 @@ def handle_text_message(event):
         confirm_template = ConfirmTemplate(text='あなたは未認証のユーザです。管理者に認証リクエストを送信しますか？', actions=[
             PostbackAction(
                 label='はい',
-                data='auth'
+                data='action=auth&user_id=' + user_id
             ),
             PostbackAction(
                 label='いいえ',
-                data='bye'
+                data='action=bye&user_id=' + user_id
             ),
         ])
         template_message = TemplateSendMessage(
@@ -160,13 +156,16 @@ def handle_text_message(event):
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
-    if event.postback.data == 'auth':
-        line_bot_api.reply_message(
+    # postbackのデータ解析
+    qs_d = urllib.parse.parse_qs(event.postback.data)
+    action = qs_d['action'][0]
+    user_id = qs_d['user_id'][0]
+    if action == 'auth':
+        line_bot_api.push_message(
             event.reply_token, TextSendMessage(text='管理者宛に認証リクエストを申請しました。ちょっと待ってね'))
-        display_name = line_bot_api.get_profile(event.source.user_id).display_name
         # User is not authenticated
         # 7 Message
-        confirm_template = ConfirmTemplate(text=display_name + 'から認証リクエストきたけど認証しちゃう？', actions=[
+        confirm_template = ConfirmTemplate(text=line_bot_api.get_profile(user_id).display_name + 'から認証リクエストきたけど認証しちゃう？', actions=[
             PostbackAction(
                 label='はい',
                 data='auth_yes'
@@ -179,16 +178,16 @@ def handle_postback(event):
         template_message = TemplateSendMessage(
             alt_text='認証確認', template=confirm_template)
         line_bot_api.push_message(line_admin_user_id, template_message)
-    elif event.postback.data == 'bye':
+    elif action == 'bye':
         # 6 Message
         line_bot_api.reply_message(
             event.reply_token, TextSendMessage(text='bye!'))
-    elif event.postback.data == 'auth_no':
+    elif action == 'auth_no':
         # [Admin's Answer is "No"]
         line_bot_api.push_message(user_id, TextSendMessage(text="ごめん。あかんってさ"))
-    elif event.postback.data == 'auth_yes':
+    elif action == 'auth_yes':
         # [Admin's Answer is "Yes"]
-        user = User(name=profile.display_name, user_id=user_id)
+        user = User(name=line_bot_api.get_profile(user_id).display_name, user_id=user_id)
         session.add(user) # insert処理
         session.commit()    # commit
         line_bot_api.push_message(user_id, TextSendMessage(text="よかったね。承認されたみたいよ。"))

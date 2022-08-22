@@ -162,17 +162,17 @@ def handle_postback(event):
     user_id = qs_d['user_id'][0]
     if action == 'auth':
         line_bot_api.push_message(
-            event.reply_token, TextSendMessage(text='管理者宛に認証リクエストを申請しました。ちょっと待ってね'))
+            user_id, TextSendMessage(text='管理者宛に認証リクエストを申請しました。ちょっと待ってね'))
         # User is not authenticated
         # 7 Message
         confirm_template = ConfirmTemplate(text=line_bot_api.get_profile(user_id).display_name + 'から認証リクエストきたけど認証しちゃう？', actions=[
             PostbackAction(
                 label='はい',
-                data='auth_yes'
+                data='action=auth_yes&user_id=' + user_id
             ),
             PostbackAction(
                 label='いいえ',
-                data='auth_no'
+                data='action=auth_no&user_id=' + user_id
             ),
         ])
         template_message = TemplateSendMessage(
@@ -189,7 +189,13 @@ def handle_postback(event):
         # [Admin's Answer is "Yes"]
         user = User(name=line_bot_api.get_profile(user_id).display_name, user_id=user_id)
         session.add(user) # insert処理
-        session.commit()    # commit
+        try:
+            session.commit()    # commit
+        except:
+            session.rollback()
+            raise
+        finally:
+            session.close()
         line_bot_api.push_message(user_id, TextSendMessage(text="よかったね。承認されたみたいよ。"))
 
 

@@ -221,5 +221,9 @@ if __name__ == "__main__":
 
     # create tmp dir for download content
     make_static_tmp_dir()
-
-    app.run(debug=options.debug, port=options.port, host="0.0.0.0")
+    import ssl
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    ssl_context.load_cert_chain(
+        'fullchain.pem', 'privkey.pem'
+    )
+    app.run(ssl_context=ssl_context, debug=options.debug, port=options.port, host="0.0.0.0")

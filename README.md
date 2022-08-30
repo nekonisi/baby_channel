@@ -59,6 +59,12 @@ end
   sudo apt install sqlite3 -y
   ```
 
+- expand submodule
+
+```
+cd nekonisi_dht11;
+git submodule update -i;
+```
 - install pip library
 ```
 pip install -r requirements.txt

@@ -34,6 +34,10 @@ from linebot.models import (
 # DB関連機能の読み込み
 from DB.db import *
 import urllib.parse
+
+# 温湿度計機能の読み込み
+from dht11.app import *
+
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
 
@@ -133,21 +137,27 @@ def handle_text_message(event):
         if url:
             url = request.url_root + '/static/photo.png'
             app.logger.info("url=" + url)
-            line_bot_api.reply_message(
-                event.reply_token,
+            line_bot_api.push_message(
+                event.source.user_id,
                 ImageSendMessage(url, url)
             )
-            # 気温と湿度を返却
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text='気温と湿度')
-            )
         else:
-            # 気温と湿度を返却
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text='写真撮影に失敗しちゃいました！')
             )
+        # センサーのオブジェクトをインスタンス化
+        dht11 = Dht11(4, 10)
+        result = dht11.getTempeatureAndHumidity()
+        if result:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='気温: ' + str(result[0]) ' 湿度: ' + str(result[1]))
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='気温と温度の取得は失敗しちゃいました！')
     else:
         line_bot_api.push_message(
             line_admin_user_id,
